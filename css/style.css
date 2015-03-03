@@ -1,0 +1,51 @@
+#header {
+ width: 640px;
+ text-align: center;
+ margin: auto;
+}
+
+#title {
+ font-family: 'Raleway', Helvetica, Arial, sans-serif;
+ font-size: 50px;
+ line-height: 70px;
+}
+
+#video {
+ height: 480px;
+ width: 640px;
+ margin: auto;
+ border: 1px black solid;
+}
+
+#controls {
+ position: relative;
+ text-align: center;
+ margin: auto;
+ overflow: auto;
+ width: 640px;
+}
+
+#controls ul {
+ padding: 0;
+}
+
+#controls ul li {
+ display: inline-block;
+}
+
+#speech {
+ width: 640px;
+ margin: auto;
+ text-align: center;
+}
+
+#footer {
+ font-family: 'Raleway', Helvetica, Arial, sans-serif;
+ width: 640px;
+ text-align: center;
+ margin: auto;
+}
+
+#east, #northeast, #north, #northwest, #west {
+ cursor: pointer;
+}
