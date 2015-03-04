@@ -1,16 +1,17 @@
 var first_focus = true;
 var hold = true;
-var down = false;
- 
+var mousedown = false;
+var keydown = false;
+
 function sendDirection(direction) {
  console.log("Sending ajax request direction: "+direction);
- down = true;
+ mousedown = true;
  return false;
 }
 
 function sendStop() {
  console.log("Sending ajax request direction: stop");
- down = false;
+ mousedown = false;
  return false;
 }
 
@@ -43,7 +44,7 @@ function autorun() {
   eventSubscription="mousedown";
 
   $('#east, #northeast, #north, #northwest, #west').on("mouseout",function(){
-   if ( down ) {
+   if ( mousedown ) {
     return sendStop();
    }
   });
@@ -72,6 +73,35 @@ function autorun() {
 
  $('#west').on(eventSubscription,function(){
   return sendDirection("west");
+ });
+
+ $(document).keydown(function(e) {
+  if(e.which == 13) {
+   console.log('You pressed enter!');
+   keydown = true;
+  }
+  if(e.which == 97 || e.which == 65) {
+   console.log('You pressed "a"!');
+   keydown = true;
+  }
+  if (e.which == 115 || e.which == 83) {
+   console.log('You pressed "s"!');
+   keydown = true;
+  }
+  if (e.which == 100 || e.which == 68) {
+   console.log('You pressed "d"!');
+   keydown = true;
+  }
+  if (e.which == 119 || e.which == 87) {
+   console.log('You pressed "w"!');
+   keydown = true;
+  }
+ });
+ $(document).keyup(function(e) {
+   if ( keydown ) {
+    console.log('You let go!');
+    keydown = false
+   }
  });
 }
 
