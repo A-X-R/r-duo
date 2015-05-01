@@ -1,10 +1,31 @@
 var first_focus = true;
-var hold = true;
+var hold = false;
 var mousedown = false;
 var keydown = false;
 
 function sendDirection(direction) {
  console.log("Sending ajax request direction: "+direction);
+
+ switch(direction) {
+  case "north":
+   d = "s";
+   break;
+  case "west":
+   d = "a";
+   break;
+  case "east":
+   d = "d";
+   break;
+ }
+
+ $.ajax({
+  method: "PUT",
+  url: "http://localhost:8080/",
+  data: { direction: d }
+ }).done(function( msg ) {
+  //alert( "From Server: " + msg );
+ });
+
  mousedown = true;
  return false;
 }
@@ -16,28 +37,6 @@ function sendStop() {
 }
 
 function autorun() {
- $('#speechinput').focusout(function(){
-  if ( first_focus != true ) {
-   if ( $(this).val() == '' )
-   {
-    $(this).val('Ask a question to a maker! Type here!');
-    first_focus = true;
-   }
-  }
- });
-
- $('#speechinput').focusin(function(){
-  if ( first_focus == true ) {
-   $(this).val('');
-   first_focus = false;
-  }
- });
-
- $('#speak').on("click",function(){
-  var url = "/speak/" + encodeURIComponent($('#speechinput').val());
-  console.log("AJAX: " + url);
- });
-
  var eventSubscription="click";
  if ( hold )
  {
