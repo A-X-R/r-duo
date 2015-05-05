@@ -1,11 +1,10 @@
 #!/bin/bash
 
-
 WIDTH=640
 HEIGHT=480
 FPS=30
 
-TWITCH_KEY="insert key here"
+TWITCH_KEY="live_89916911_6FSHP4XbA7b7lE4ne1SPAkxZNuVKNr"
 LOCATION="rtmp://live.twitch.tv/app/$TWITCH_KEY live=1 flashver=FME/3.0%20(compatible;%20FMSc%201.0)"
 
 gst-launch-1.0 \
