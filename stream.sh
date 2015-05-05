@@ -14,7 +14,7 @@ gst-launch-1.0 \
     ! video/x-raw,width=$WIDTH,height=$HEIGHT,framerate=$FPS/1 \
     ! omxh264enc target-bitrate=1000000 control-rate=3 interval-intraframes=1000 \
     ! h264parse \
-    ! queue \
+    ! queue max-size-time=30303030 \
     ! flvmux streamable=true \
     \
     ! rtmpsink location="$LOCATION"
@@ -24,5 +24,5 @@ gst-launch-1.0 \
     # ! audio/x-raw,rate=44100 \
     # ! voaacenc \
     # ! aacparse \
-    # ! queue \
+    # ! queue max-size-time=30303030 \
     # ! flvmux0. flvmux0. \
