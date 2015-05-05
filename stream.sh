@@ -9,16 +9,20 @@ LOCATION="rtmp://live.twitch.tv/app/$TWITCH_KEY live=1 flashver=FME/3.0%20(compa
 
 gst-launch-1.0 \
     -v \
-	rtpbin name=rtpbin v4l2src device=/dev/video0 \
+    \
+    v4l2src device=/dev/video0 \
     ! video/x-raw,width=$WIDTH,height=$HEIGHT,framerate=$FPS/1 \
-	! queue \
-    \
-	! omxh264enc target-bitrate=1000000 control-rate=3 interval-intraframes=1000 \
-    ! video/x-h264,profile=high \
-	! h264parse \
-	! queue max-size-bytes=10000 \
-    \
-    ! flvmux streamable=true name=mux \
+    ! omxh264enc target-bitrate=1000000 control-rate=3 interval-intraframes=1000 \
+    ! h264parse \
     ! queue \
+    ! flvmux streamable=true \
     \
     ! rtmpsink location="$LOCATION"
+
+    # \
+    # alsasrc device=hw:1 \
+    # ! audio/x-raw,rate=44100 \
+    # ! voaacenc \
+    # ! aacparse \
+    # ! queue \
+    # ! flvmux0. flvmux0. \
