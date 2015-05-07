@@ -1,7 +1,7 @@
 #!/bin/bash
 
-WIDTH=640
-HEIGHT=480
+WIDTH=320
+HEIGHT=240
 FPS=30
 
 TWITCH_KEY="live_89916911_6FSHP4XbA7b7lE4ne1SPAkxZNuVKNr"
@@ -12,17 +12,16 @@ gst-launch-1.0 \
     \
     v4l2src device=/dev/video0 \
     ! video/x-raw,width=$WIDTH,height=$HEIGHT,framerate=$FPS/1 \
-    ! omxh264enc target-bitrate=1000000 control-rate=3 interval-intraframes=1000 \
+    ! queue \
+    ! x264enc bitrate=500 key-int-max=30 tune="zerolatency" \
     ! h264parse \
-    ! queue max-size-time=30303030 \
     ! flvmux streamable=true \
     \
+    alsasrc device=hw:1 \
+    ! audio/x-raw \
+    ! queue \
+    ! voaacenc bitrate=16000 \
+    ! aacparse \
+    ! flvmux0. flvmux0. \
+    \
     ! rtmpsink location="$LOCATION"
-
-    # \
-    # alsasrc device=hw:1 \
-    # ! audio/x-raw,rate=44100 \
-    # ! voaacenc \
-    # ! aacparse \
-    # ! queue max-size-time=30303030 \
-    # ! flvmux0. flvmux0. \
