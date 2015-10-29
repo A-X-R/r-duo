@@ -33,12 +33,6 @@
  display: inline-block;
 }
 
-#speech {
- width: 640px;
- margin: auto;
- text-align: center;
-}
-
 #footer {
  font-family: 'Raleway', Helvetica, Arial, sans-serif;
  width: 640px;
@@ -46,6 +40,6 @@
  margin: auto;
 }
 
-#east, #northeast, #north, #northwest, #west {
+#east, #north, #west {
  cursor: pointer;
 }
