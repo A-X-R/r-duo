@@ -46,6 +46,13 @@ void debugPrintln(const char *msg) {
 #endif
 }
 
+/******************** Configuration Parameters ********************/
+
+const uint32_t  BELL_ON_TIME = 10000;   // bell can be on for 10 seconds max
+const uint32_t  HORN_ON_TIME = 2000;    // horn can be on for 2 seconds max
+const uint32_t  SMOKE_ON_TIME = 8000;   // smoke cycle is 8 seconds on,
+const uint32_t  SMOKE_OFF_TIME = 5000;  // 5 seconds off
+
 
 /******************** Shift-Register Manipulation ********************/
 #ifdef SHIELD_EXISTS
@@ -114,6 +121,12 @@ void initMCP() {
 void mcpWrite(int pin, uint8_t val) {
 #ifdef SHIELD_EXISTS
   mcp.digitalWrite(pin, val);
+#endif
+}
+
+void mcpPinMode(int pin, uint8_t mode) {
+#ifdef SHIELD_EXISTS
+  mcp.pinMode(pin, mode);
 #endif
 }
 
@@ -220,115 +233,116 @@ void Calliope::setPipes(uint8_t pipes) {
 
 int testPulseWidth = 100;
 
-class BellRinger {
+class SinglePulser {
   public:
-    BellRinger(int pin) :
-      pin(pin), state(STOPPED) {};
+    SinglePulser(int pin, uint32_t on_time);
     void start();
     void stop();
     bool cycle();
     bool active();
 
   protected:
-    enum      BellState { STOPPED, RINGING };
-    BellState state;
+    enum      SPState { STOPPED, ACTIVE };
+    SPState   state;
     int       pin;
+    uint32_t  timer, on_time;
 };
 
-void BellRinger::start() {
-  state = RINGING;
-  mcpWrite(pin, HIGH);
+SinglePulser::SinglePulser(int pin, uint32_t on_time) :
+      pin(pin), on_time(on_time) {
+  state = STOPPED;
+}          
+
+void SinglePulser::start() {
+  if (STOPPED == state) {
+    state = ACTIVE;
+    mcpWrite(pin, HIGH);
+    timer = millis() + on_time;
+  }
 }
 
-void BellRinger::stop() {
+void SinglePulser::stop() {
+  if (STOPPED != state) {
     state = STOPPED;
     mcpWrite(pin, LOW);
- }
+  }
+}
 
-bool BellRinger::active() {
+bool SinglePulser::cycle() {
+  if (STOPPED != state) {
+    if (millis() > timer)
+      stop();
+  }
+  return STOPPED != state;
+}  
+
+bool SinglePulser::active() {
   return STOPPED != state;
 }
 
-bool BellRinger::cycle() {
-  return active();
-}
-
-class SmokeGenerator {
+class PulseCycler {
   public:
-    SmokeGenerator(int valve_pin, int heater_pin) :
-      valve_pin(valve_pin), heater_pin(heater_pin), state(STOPPED) {};
+    PulseCycler(int pin, uint32_t on_time, uint32_t off_time);
     void start();
     void stop();
     bool cycle();
     bool active();
 
   protected:
-    enum      SmokeState { STOPPED, STARTING, HEATING, RESTING, STOPPING };
-    SmokeState state;
-    int       valve_pin, heater_pin;
-    uint32_t  timer;
-    uint32_t  cycleTimer;  // how long have we been heating?
+    enum      PCState { STOPPED, ACTIVE, RESTING };
+    PCState   state;
+    int       pin;
+    uint32_t  timer, on_time, off_time;
 };
 
-void SmokeGenerator::start() {
-  if ((STOPPED == state) || (STOPPING == state)) {
-    // start fan for 1 second before making smoke
-    state = STARTING;
-    mcpWrite(valve_pin, HIGH);
-    timer = millis() + 1000;  // run fan for 1 second at start
-    // remember when this cycle started so we know when to cool off
-    cycleTimer = millis();
+PulseCycler::PulseCycler(int pin, uint32_t on_time, uint32_t off_time) :
+      pin(pin), on_time(on_time), off_time(off_time) {
+  state = STOPPED;
+}          
+
+void PulseCycler::start() {
+  if (STOPPED == state) {
+    state = ACTIVE;
+    mcpWrite(pin, HIGH);
+    timer = millis() + on_time;
   }
 }
 
-void SmokeGenerator::stop() {
-  if (active()) {
-    // shut heater off, run fan for cooloff
-    mcpWrite(valve_pin, HIGH);
-    mcpWrite(heater_pin, LOW);
-    state = STOPPING;
-    timer = millis() + 5000;
+void PulseCycler::stop() {
+  if (STOPPED != state) {
+    state = STOPPED;
+    mcpWrite(pin, LOW);
   }
 }
 
-bool SmokeGenerator::active() {
+bool PulseCycler::cycle() {
+  if (STOPPED != state) {
+    if (millis() > timer)
+      switch(state) {
+        case ACTIVE:
+          mcpWrite(pin, LOW);
+          state = RESTING;
+          timer = millis() + off_time;
+        break;
+        case RESTING:
+          mcpWrite(pin, HIGH);
+          state = ACTIVE;
+          timer = millis() + on_time;
+        break;
+      }
+  }
   return STOPPED != state;
-}
+}  
 
-bool SmokeGenerator::cycle() {
-  // see if it's time to do anything
-  if ((STOPPED != state) && (timer <= millis())) {
-    switch (state) {
-      case HEATING:   // if heating, stop
-         mcpWrite(heater_pin, LOW);
-        state = RESTING;
-        // either a short or a long rest, depending on how long we've been running
-        if ((millis() - cycleTimer) >= 48000UL) {
-          timer = millis() + 30000UL;  // 30-second cooloff
-          cycleTimer = millis() + 30000UL;
-        }
-        else
-          timer = millis() + 4000UL; // 4 sec between heat pulses in normal mode
-        break;
-      case STARTING:
-      case RESTING:   // if resting, heat
-        mcpWrite(heater_pin, HIGH);
-        state = HEATING;
-        timer = millis() + 4000UL;  // 4 seconds of heating
-        break;
-      case STOPPING:   // done, so shut down
-        mcpWrite(valve_pin, LOW);
-        state = STOPPED;
-    }
-  }
-  return active();
+bool PulseCycler::active() {
+  return STOPPED != state;
 }
 
 /************************ Blinker ************************/
 
 class LEDBlinker {
   public:
-    LEDBlinker(int pin, uint32_t period = 500);
+    LEDBlinker(int pin, uint32_t period = 1000);
     void pulse();
     void cycle();
 
@@ -361,7 +375,7 @@ void LEDBlinker::cycle() {
       mcpWrite(pin, HIGH);
     lit = !lit;
     if (pulseTimer > millis())
-      timer = millis() + period / 8;
+      timer = millis() + period / 16;
     else
       timer = millis() + period;
   }
@@ -370,27 +384,28 @@ void LEDBlinker::cycle() {
 /*********************** Main Code ***********************/
 
 const int bell_pin = 0;
-const int smokeValve_pin = 1;
-const int smokeHeater_pin = 2;
-const int aux1_pin = 3;
+// channel 1 is broken for now
+const int horn_pin = 2;
+const int smoke_pin = 3;
 const int testButton_pin = 7;
 const int testLED_pin = 6;
 
 enum cmd_type { NO_CMD, PLAY_1, PLAY_2, PLAY_3, PLAY_4, STOP_PLAY, SMOKE_ON, SMOKE_OFF, BELL_ON, BELL_OFF,
-                AUX1_ON, AUX1_OFF, AUX2_ON, AUX2_OFF };
+				HORN_ON, HORN_OFF, AUX1_ON, AUX1_OFF, AUX2_ON, AUX2_OFF };
 
 Calliope organ;
-BellRinger bell(bell_pin);
-SmokeGenerator smoker(smokeValve_pin, smokeHeater_pin);
+SinglePulser bell(bell_pin, BELL_ON_TIME);
+SinglePulser horn(horn_pin, HORN_ON_TIME);
+PulseCycler smoker(smoke_pin, SMOKE_ON_TIME, SMOKE_OFF_TIME);
 LEDBlinker blinker(testLED_pin);
 
 bool  aux1Active;
 
 #ifdef READING_SERVOS
-  AnalogChannel servo4(4);
-  AnalogChannel servo6(6);
+  AnalogChannel soundServo(2);
+  BooleanChannel smokeServo(3);
 //  BooleanChannel calliopeTrigger(5);
-  bool lastCalliopeTrigger, lastBellTrigger, lastSmokeTrigger;
+  bool lastCalliopeTrigger, lastBellTrigger, lastHornTrigger, lastSmokeTrigger;
 #endif
 
 const uint16_t vaderTempo = 90;
@@ -439,12 +454,14 @@ void setup() {
   initMCP();
   mcp.pinMode(bell_pin, OUTPUT);
   mcp.digitalWrite(bell_pin, LOW);
-  mcp.pinMode(smokeValve_pin, OUTPUT);
-  mcp.digitalWrite(smokeValve_pin, LOW);
-  mcp.pinMode(smokeHeater_pin, OUTPUT);
-  mcp.digitalWrite(smokeHeater_pin, LOW);
-  mcp.pinMode(aux1_pin, OUTPUT);
-  mcp.digitalWrite(aux1_pin, LOW);
+  mcp.pinMode(horn_pin, OUTPUT);
+  mcp.digitalWrite(horn_pin, LOW);
+  mcp.pinMode(smoke_pin, OUTPUT);
+  mcp.digitalWrite(smoke_pin, LOW);
+//  mcp.pinMode(smokeHeater_pin, OUTPUT);
+//  mcp.digitalWrite(smokeHeater_pin, LOW);
+//  mcp.pinMode(aux1_pin, OUTPUT);
+//  mcp.digitalWrite(aux1_pin, LOW);
   mcp.pinMode(testButton_pin, INPUT);
   mcp.pullUp(testButton_pin, HIGH);
   mcp.pinMode(testLED_pin, OUTPUT);
@@ -452,10 +469,11 @@ void setup() {
   #endif
   #ifdef READING_SERVOS
   ServoDecoder::init();
-  servo4.setSlew(25);
-  servo6.setSlew(20);
+  soundServo.setSlew(20);
+  smokeServo.setSlew(20);
   lastCalliopeTrigger = false;
   lastBellTrigger = false;
+  lastHornTrigger = false;
   lastSmokeTrigger = false;
   #endif
   aux1Active = false;
@@ -466,7 +484,18 @@ void loop() {
 #ifdef SHIELD_EXISTS
   if (!mcp.digitalRead(testButton_pin) && !organ.playing()) {
     debugPrintln("Test button!");
-    organ.play(scalesTune, scalesTempo);
+  // cycle bell, horn and smoke
+  mcp.digitalWrite(bell_pin, HIGH);
+  delay(750);
+  mcp.digitalWrite(bell_pin, LOW);
+  mcp.digitalWrite(horn_pin, HIGH);
+  delay(750);
+  mcp.digitalWrite(horn_pin, LOW);
+  mcp.digitalWrite(smoke_pin, HIGH);
+  delay(1000);
+  mcp.digitalWrite(smoke_pin, LOW);
+   
+//    organ.play(scalesTune, scalesTempo);
   }
 #endif
 
@@ -502,6 +531,12 @@ void loop() {
       case 'b':
         cmd = BELL_OFF;
         break;
+	case 'H':
+		cmd = HORN_ON;
+		break;
+	case 'h':
+		cmd = HORN_OFF;
+                break;
       case 'S':
         cmd = SMOKE_ON;
         break;
@@ -518,64 +553,38 @@ void loop() {
   }
 #ifdef READING_SERVOS
   // if no serial command, try the servos
-  if (NO_CMD == cmd) {
-    if (servo6.validData()) {
-    // channel 6 is used as a boolean toggle for the organ, channel 4 controls bell & smoke
-    int ch6val = servo6.value();
-    if ((ch6val < 1350) && !lastCalliopeTrigger) {
-      lastCalliopeTrigger = true;
-      if (!organ.playing())
-        cmd = PLAY_2;   // Imperial March is the only tune that really works
-    }
-/*      
-    bool trigger = calliopeTrigger.value();
-    if (trigger && !lastCalliopeTrigger) { 
-      lastCalliopeTrigger = true;
-//Serial.println("Servo trigger");
-      if (!organ.playing()) {
-        int ch6val = servo6.value();
-        if (ch6val > 1800)
-          cmd = PLAY_1;
-        else if (ch6val > 1600)
-          cmd = PLAY_2;
-        else
-          cmd = PLAY_3;
-      }
-    }
-*/
-    else
-      if (lastCalliopeTrigger && (ch6val > 1750 )) {
-        lastCalliopeTrigger = false;
-        if (organ.playing())
-          cmd = STOP_PLAY;
-      }
-    }
-//    if (!servo4.validData())
-//      Serial.println("BAD CH4");
-    if ((NO_CMD == cmd) && servo4.validData()) {
-      int ch4val = servo4.value();
-//      Serial.println(ch4val);
-      if ((ch4val < 1300) && !lastSmokeTrigger) {
-        cmd = SMOKE_ON;
-        lastSmokeTrigger = true;
+
+	if (NO_CMD == cmd) {
+    if (soundServo.validData()) {
+      int servoVal = soundServo.value();
+//      Serial.println(servoVal);
+      if ((servoVal < 1300) && !lastHornTrigger) {
+        cmd = HORN_ON;
+        lastHornTrigger = true;
       }
       else
-        if ((ch4val > 1400) & lastSmokeTrigger) {
-          cmd = SMOKE_OFF;
-          lastSmokeTrigger = false;
+        if ((servoVal > 1400) & lastHornTrigger) {
+          cmd = HORN_OFF;
+          lastHornTrigger = false;
         }
         else
-          if ((ch4val > 1700) && !lastBellTrigger) {
+          if ((servoVal > 1700) && !lastBellTrigger) {
             cmd = BELL_ON;
             lastBellTrigger = true;
           }
           else
-            if ((ch4val < 1600) && lastBellTrigger) {
+            if ((servoVal < 1600) && lastBellTrigger) {
               cmd = BELL_OFF;
               lastBellTrigger = false;
             }
     }
+		bool smokeTrigger = smokeServo.value();
+		if (smokeTrigger != lastSmokeTrigger) {
+			cmd = smokeTrigger ? SMOKE_ON : SMOKE_OFF;
+			lastSmokeTrigger = smokeTrigger;
+		}
   }
+
 #endif
 
   if (NO_CMD != cmd)
@@ -618,6 +627,16 @@ void loop() {
       bell.stop();
       break; 
          
+    case HORN_ON:
+      debugPrintln("Horn on");
+      horn.start();
+      break;
+          
+    case HORN_OFF:
+      debugPrintln("Horn off");
+      horn.stop();
+      break; 
+         
     case SMOKE_ON:
       debugPrintln("Smoke on");
       smoker.start();
@@ -626,8 +645,10 @@ void loop() {
     case SMOKE_OFF:
       debugPrintln("Smoke off");
       smoker.stop();
-      break;    
+      break; 
+  
 
+/*
     case AUX1_ON:
       debugPrintln("Aux1 on");
       mcpWrite(aux1_pin, HIGH);
@@ -638,11 +659,13 @@ void loop() {
       debugPrintln("Aux1 off");
       mcpWrite(aux1_pin, LOW);
       aux1Active = false;
-      break;    
+      break; 
+*/   
   }
   // do maintenance for background processes
   organ.cycle();
   bell.cycle();
+  horn.cycle();
   smoker.cycle();
   blinker.cycle();
 }
